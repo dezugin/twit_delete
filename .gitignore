@@ -1,0 +1,6 @@
+.browser-profile*
+.browser-profile/
+.browser-profile-firefox/
+.venv/
+__pycache__/
+*.pyc

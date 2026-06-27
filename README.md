@@ -2,6 +2,30 @@
 
 A Playwright browser-navigation tool for deleting posts and replies from your own X account and undoing your reposts. Political matching is keyword based. Scans are unlimited unless `--max-posts` is supplied.
 
+## Project Structure
+
+```text
+twit_delete.py              Minimal command-line entrypoint
+keyword_profiles.json       Political terms and editable exclusion profiles
+twit_cleaner/
+  __main__.py               Package entrypoint for python -m twit_cleaner
+  app.py                    Application orchestration and exit codes
+  cli.py                    Arguments, shortcuts, and validation
+  models.py                 Enums and immutable runtime models
+  constants.py              UI labels and project paths
+  keywords.py               Profile loading and text classification
+  urls.py                   Profile and owned-status URL handling
+  posts.py                  Timeline-card inspection and type decisions
+  navigation.py             Login and profile navigation
+  actions.py                Delete, permalink fallback, and unretweet actions
+  scanner.py                Sequential timeline scanning
+  browser.py                CDP and persistent-browser lifecycle
+tests/
+  test_domain.py            Ownership, mode, CLI, and keyword contracts
+```
+
+Internal modules use package-relative imports, while `twit_delete.py` only imports and runs `twit_cleaner.app.main`.
+
 ## Setup
 
 ```bash

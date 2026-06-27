@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "twit-cleaner"
-version = "0.1.0"
+version = "0.1.1"
 description = "Browser-driven X/Twitter post cleanup command-line tool"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,9 +23,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/dezugin/twit_delete"
-Repository = "https://github.com/dezugin/twit_delete"
-Issues = "https://github.com/dezugin/twit_delete/issues"
+[project.urls]
+Homepage = "https://github.com/dezugin/twit_cleaner"
+Repository = "https://github.com/dezugin/twit_cleaner"
+Issues = "https://github.com/dezugin/twit_cleaner/issues"
 
 [project.scripts]
 twit-cleaner = "twit_cleaner.app:main"

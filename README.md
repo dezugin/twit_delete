@@ -2,20 +2,6 @@
 
 A Playwright browser-navigation tool for deleting posts and replies from your own X account and undoing your reposts. Political matching is keyword based. Scans are unlimited unless `--max-posts` is supplied.
 
-## Warning: Delete Everything
-
-**Unsafe and irreversible:** on the `/with_replies` screen, this command first undoes every repost it can find, then deletes every remaining reply and original post. It does not inspect political content and does not ask for confirmation in the terminal. X still displays its normal per-item confirmation dialog, which the tool accepts automatically.
-
-With your remote-debugging Chrome window open and logged in, run:
-
-```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all
-```
-
-The processing order is: **unretweet everything**, **delete replies**, then **delete original posts**. Items are handled sequentially: find one, remove it, query the updated `/with_replies` timeline, then find the next one. Press `Ctrl+C` to stop.
-
-Before every removal, the tool checks whether the item is a repost. Reposts always use **Undo repost**; only verified non-reposts enter the **Delete** menu. If the check cannot be completed, the item is skipped.
-
 ## Setup
 
 ```bash
@@ -44,6 +30,20 @@ Confirm that the connection works:
 ```bash
 curl http://127.0.0.1:9222/json/version
 ```
+
+## Warning: Delete Everything
+
+**Unsafe and irreversible:** on the `/with_replies` screen, this command first undoes every repost it can find, then deletes every remaining reply and original post. It does not inspect political content and does not ask for confirmation in the terminal. X still displays its normal per-item confirmation dialog, which the tool accepts automatically.
+
+With your remote-debugging Chrome window open and logged in, run:
+
+```bash
+python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all
+```
+
+The processing order is: **unretweet everything**, **delete replies**, then **delete original posts**. Items are handled sequentially: find one, remove it, query the updated `/with_replies` timeline, then find the next one. Press `Ctrl+C` to stop.
+
+Before every removal, the tool checks whether the item is a repost. Reposts always use **Undo repost**; only verified non-reposts enter the **Delete** menu. If the check cannot be completed, the item is skipped.
 
 ## Political Command Examples
 

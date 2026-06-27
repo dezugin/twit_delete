@@ -9,6 +9,7 @@ dry-run by default; pass --delete to perform destructive actions.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -41,69 +42,7 @@ except ModuleNotFoundError as exc:
     raise SystemExit(1) from exc
 
 
-DEFAULT_POLITICAL_KEYWORDS = {
-    "russia",
-    "ukraine",
-    "brasil",
-    "brazil",
-    "esquerda",
-    "direita",
-    "abortion",
-    "biden",
-    "bolsonaro",
-    "congress",
-    "conservative",
-    "democrat",
-    "democratic",
-    "election",
-    "electoral",
-    "fascism",
-    "fascist",
-    "governador",
-    "governor",
-    "impeachment",
-    "leftist",
-    "liberal",
-    "lula",
-    "maga",
-    "mayor",
-    "minister",
-    "ministro",
-    "parliament",
-    "politica",
-    "política",
-    "president",
-    "prime minister",
-    "progressive",
-    "republican",
-    "right-wing",
-    "senate",
-    "senator",
-    "socialism",
-    "socialist",
-    "stf",
-    "supreme court",
-    "trump",
-    "vaccine mandate",
-    "white house",
-}
-
-DEFAULT_POLITICAL_HASHTAGS = {
-    "biden2024",
-    "bolsonaro",
-    "democrats",
-    "elections",
-    "eleicoes",
-    "fakenews",
-    "fora",
-    "impeachment",
-    "lula",
-    "maga",
-    "politica",
-    "politics",
-    "republicans",
-    "trump2024",
-}
+DEFAULT_KEYWORD_PROFILES_PATH = Path(__file__).with_name("keyword_profiles.json")
 
 MENU_LABELS = [
     "More",
@@ -153,6 +92,12 @@ class BrowserName(str, Enum):
     FIREFOX = "firefox"
 
 
+class ExclusionMode(str, Enum):
+    PERSONAL = "personal"
+    WORK = "work"
+    CUSTOM = "custom"
+
+
 @dataclass(frozen=True)
 class MatchResult:
     matched: bool
@@ -163,6 +108,14 @@ class MatchResult:
 class PostKind:
     is_reply: bool
     is_retweet: bool
+
+
+@dataclass(frozen=True)
+class KeywordRules:
+    political_keywords: frozenset[str]
+    political_hashtags: frozenset[str]
+    exclusion_keywords: frozenset[str]
+    exclusion_hashtags: frozenset[str]
 
 
 def parse_args() -> argparse.Namespace:
@@ -252,6 +205,17 @@ def parse_args() -> argparse.Namespace:
         help="Text file with extra political keywords, one per line. Lines starting with # are ignored.",
     )
     parser.add_argument(
+        "--keyword-profiles",
+        type=Path,
+        default=DEFAULT_KEYWORD_PROFILES_PATH,
+        help="JSON file containing political terms and exclusion profiles.",
+    )
+    parser.add_argument(
+        "--exclude-mode",
+        choices=[mode.value for mode in ExclusionMode],
+        help="Keep posts/replies matching the personal, work, or custom exclusion profile.",
+    )
+    parser.add_argument(
         "--only-keywords-file",
         action="store_true",
         help="Use only --keywords-file keywords instead of the built-in list.",
@@ -337,16 +301,51 @@ def browser_type(playwright, browser: BrowserName):
     return playwright.chromium
 
 
-def load_keywords(path: Path | None, only_file: bool) -> set[str]:
-    keywords: set[str] = set() if only_file else set(DEFAULT_POLITICAL_KEYWORDS)
-    if not path:
-        return keywords
+def configured_terms(data: object, section: str, key: str, hashtags: bool = False) -> frozenset[str]:
+    if not isinstance(data, dict) or not isinstance(data.get(section), dict):
+        raise ValueError(f"Keyword profiles must contain an object named '{section}'.")
+    values = data[section].get(key)
+    if not isinstance(values, list) or not all(isinstance(value, str) for value in values):
+        raise ValueError(f"Keyword profile '{section}.{key}' must be a list of strings.")
+    normalized = {
+        value.strip().lower().removeprefix("#") if hashtags else value.strip().lower()
+        for value in values
+        if value.strip()
+    }
+    return frozenset(normalized)
 
-    for line in path.read_text(encoding="utf-8").splitlines():
-        keyword = line.strip().lower()
-        if keyword and not keyword.startswith("#"):
-            keywords.add(keyword)
-    return keywords
+
+def load_keyword_rules(path: Path, exclusion_mode: str | None) -> KeywordRules:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise ValueError(f"Keyword profiles file not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Keyword profiles file is invalid JSON: {path}: {exc}") from exc
+
+    exclusion_keywords: frozenset[str] = frozenset()
+    exclusion_hashtags: frozenset[str] = frozenset()
+    if exclusion_mode:
+        exclusions = data.get("exclusions") if isinstance(data, dict) else None
+        exclusion_keywords = configured_terms(exclusions, exclusion_mode, "keywords")
+        exclusion_hashtags = configured_terms(exclusions, exclusion_mode, "hashtags", hashtags=True)
+
+    return KeywordRules(
+        political_keywords=configured_terms(data, "politics", "keywords"),
+        political_hashtags=configured_terms(data, "politics", "hashtags", hashtags=True),
+        exclusion_keywords=exclusion_keywords,
+        exclusion_hashtags=exclusion_hashtags,
+    )
+
+
+def load_keyword_file(path: Path | None) -> set[str]:
+    if not path:
+        return set()
+    return {
+        line.strip().lower()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
 
 
 def keyword_regex(keyword: str) -> re.Pattern[str]:
@@ -431,6 +430,10 @@ def combined_action_target(has_active_unretweet: bool, status_url: str | None) -
     if status_url:
         return Target.POSTS
     return None
+
+
+def exclusions_apply(target: Target, exclusion_mode: str | None) -> bool:
+    return bool(exclusion_mode) and target != Target.RETWEETS
 
 
 def post_kind(article: Locator) -> PostKind:
@@ -714,6 +717,7 @@ def scan_and_maybe_delete(
             made_progress = True
 
             action_target = target
+            content_text: str | None = None
             if args.delete_all:
                 combined_target = combined_action_target(active_unretweet_button(article) is not None, status_url)
                 if not combined_target:
@@ -726,6 +730,24 @@ def scan_and_maybe_delete(
                     continue
                 if not matches_target(kind, target):
                     continue
+
+            if exclusions_apply(action_target, args.exclude_mode):
+                try:
+                    content_text = post_text(article)
+                except PlaywrightError:
+                    continue
+                exclusion = classify_post(
+                    content_text,
+                    args.exclusion_keywords,
+                    args.exclusion_hashtags,
+                )
+                if exclusion.matched:
+                    scanned += 1
+                    processed_item = True
+                    preview = " ".join(content_text.split())[:180]
+                    print(f"[{scanned}] excluded by {args.exclude_mode}: {preview}")
+                    print(f"  reasons: {', '.join(exclusion.reasons)}")
+                    break
 
             scanned += 1
             processed_item = True
@@ -745,12 +767,13 @@ def scan_and_maybe_delete(
                 time.sleep(args.pause)
                 break
 
-            try:
-                text = post_text(article)
-            except TimeoutError:
-                break
-            match = classify_post(text, keywords, hashtags)
-            normalized_text = " ".join(text.split())
+            if content_text is None:
+                try:
+                    content_text = post_text(article)
+                except TimeoutError:
+                    break
+            match = classify_post(content_text, keywords, hashtags)
+            normalized_text = " ".join(content_text.split())
             preview = normalized_text[:180] + ("..." if len(normalized_text) > 180 else "")
             if not match.matched:
                 print(f"[{scanned}] keep: {preview}")
@@ -905,10 +928,20 @@ def main() -> int:
         print("--max-posts must be at least 1", file=sys.stderr)
         return 2
 
-    keywords = load_keywords(args.keywords_file, args.only_keywords_file)
-    hashtags = set() if args.only_keywords_file else set(DEFAULT_POLITICAL_HASHTAGS)
-    if MatchMode(args.match) == MatchMode.POLITICS and not keywords:
-        print("No political keywords configured.", file=sys.stderr)
+    try:
+        rules = load_keyword_rules(args.keyword_profiles, args.exclude_mode)
+        extra_keywords = load_keyword_file(args.keywords_file)
+    except (OSError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    keywords = set() if args.only_keywords_file else set(rules.political_keywords)
+    hashtags = set() if args.only_keywords_file else set(rules.political_hashtags)
+    keywords.update(extra_keywords)
+    args.exclusion_keywords = set(rules.exclusion_keywords)
+    args.exclusion_hashtags = set(rules.exclusion_hashtags)
+    if MatchMode(args.match) == MatchMode.POLITICS and not keywords and not hashtags:
+        print("No political keywords or hashtags configured.", file=sys.stderr)
         return 2
 
     mode = "DELETE" if args.delete else "DRY RUN"
@@ -926,6 +959,11 @@ def main() -> int:
     targets = [Target.POSTS] if args.delete_all else [Target(args.target)]
     print(f"Target: {'reposts and owned posts/replies' if args.delete_all else args.target}")
     print(f"Match: {args.match}")
+    if args.exclude_mode:
+        print(
+            f"Exclusions: {args.exclude_mode} "
+            f"({len(args.exclusion_keywords)} keywords, {len(args.exclusion_hashtags)} hashtags)"
+        )
     print(f"Scan limit: {args.max_posts if args.max_posts is not None else 'entire timeline'}")
     if MatchMode(args.match) == MatchMode.POLITICS:
         print(f"Keywords loaded: {len(keywords)}")

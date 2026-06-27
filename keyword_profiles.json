@@ -1,0 +1,112 @@
+{
+  "politics": {
+    "keywords": [
+      "abortion",
+      "biden",
+      "bolsonaro",
+      "brasil",
+      "brazil",
+      "congress",
+      "conservative",
+      "democrat",
+      "democratic",
+      "direita",
+      "election",
+      "electoral",
+      "esquerda",
+      "fascism",
+      "fascist",
+      "governador",
+      "governor",
+      "impeachment",
+      "leftist",
+      "liberal",
+      "lula",
+      "maga",
+      "mayor",
+      "minister",
+      "ministro",
+      "parliament",
+      "politica",
+      "política",
+      "president",
+      "prime minister",
+      "progressive",
+      "republican",
+      "right-wing",
+      "russia",
+      "senate",
+      "senator",
+      "socialism",
+      "socialist",
+      "stf",
+      "supreme court",
+      "trump",
+      "ukraine",
+      "vaccine mandate",
+      "white house"
+    ],
+    "hashtags": [
+      "biden2024",
+      "bolsonaro",
+      "democrats",
+      "elections",
+      "eleicoes",
+      "fakenews",
+      "fora",
+      "impeachment",
+      "lula",
+      "maga",
+      "politica",
+      "politics",
+      "republicans",
+      "trump2024"
+    ]
+  },
+  "exclusions": {
+    "personal": {
+      "keywords": [
+        "anniversary",
+        "birthday",
+        "family",
+        "friends",
+        "hobby",
+        "memories",
+        "personal",
+        "vacation",
+        "wedding"
+      ],
+      "hashtags": [
+        "birthday",
+        "family",
+        "memories",
+        "personal"
+      ]
+    },
+    "work": {
+      "keywords": [
+        "business",
+        "career",
+        "client",
+        "conference",
+        "hiring",
+        "job",
+        "portfolio",
+        "professional",
+        "project",
+        "work"
+      ],
+      "hashtags": [
+        "business",
+        "career",
+        "hiring",
+        "portfolio",
+        "work"
+      ]
+    },
+    "custom": {
+      "keywords": [],
+      "hashtags": []
+    }
+  }
+}

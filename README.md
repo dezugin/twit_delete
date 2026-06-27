@@ -45,6 +45,31 @@ Reposts, replies, and original posts are handled in the order they appear. Each 
 
 Before every removal, the tool checks for an active `unretweet` control. That control means your logged-in account reposted the item; the original post may belong to any account. Those items use **Undo repost** without requiring the original author's permalink to match your handle. Only post and reply deletion requires a permalink matching `/YOUR_HANDLE/status/...`, which prevents conversation cards from other accounts from being deleted. The tool first tries the timeline menu; if that fails, it opens the owned permalink in a temporary tab and retries there.
 
+## Exclusion Modes
+
+Exclusion modes preserve owned posts and replies containing configured words or hashtags. They do not prevent the tool from undoing your reposts.
+
+- `--exclude-mode personal` keeps content matching the `personal` profile.
+- `--exclude-mode work` keeps content matching the `work` profile.
+- `--exclude-mode custom` keeps content matching your personalized `custom` profile.
+
+All terms are stored in [`keyword_profiles.json`](keyword_profiles.json), outside the Python script. The `custom` profile intentionally starts with blank `keywords` and `hashtags` lists. Edit those lists to personalize what the tool should preserve:
+
+```json
+"custom": {
+  "keywords": ["my project", "family name"],
+  "hashtags": ["keepme", "portfolio"]
+}
+```
+
+Then add the custom exclusion mode to the delete-all command:
+
+```bash
+python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all --exclude-mode custom
+```
+
+Keywords are case-insensitive. Hashtags may be written with or without `#` in the JSON file.
+
 ## Political Command Examples
 
 Dry-run all political posts without deleting anything:
@@ -96,7 +121,9 @@ python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http
 --unretweet-all         Alias for --delete-all-retweets.
 --include-replies       Deprecated alias for --target replies.
 --keywords-file PATH    Add keywords from a text file, one term per line.
+--keyword-profiles PATH JSON file containing political and exclusion profiles.
 --only-keywords-file    Use only --keywords-file terms; ignore built-ins.
+--exclude-mode MODE     Preserve matches from personal, work, or custom.
 --pause SECONDS         Delay between browser actions. Default: 0.8.
 ```
 
@@ -111,75 +138,10 @@ python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http
 - Every destructive action re-checks the item type immediately before clicking; an unverified item is skipped.
 - Post ownership is verified from the profile handle in its `/HANDLE/status/...` permalink.
 - Failed timeline deletions are retried from the owned post's permalink in a temporary tab.
+- Exclusion profiles preserve matching owned posts/replies but do not preserve reposts.
 - X changes its interface often. Missing menus or confirmation buttons are reported and skipped.
 - Use this tool only on accounts you control.
 
-## Built-In Political Keywords
+## Keyword Profiles
 
-Matching is case-insensitive. Multi-word terms are matched as phrases.
-
-```text
-abortion
-biden
-bolsonaro
-brasil
-brazil
-congress
-conservative
-democrat
-democratic
-direita
-election
-electoral
-esquerda
-fascism
-fascist
-governador
-governor
-impeachment
-leftist
-liberal
-lula
-maga
-mayor
-minister
-ministro
-parliament
-politica
-política
-president
-prime minister
-progressive
-republican
-right-wing
-russia
-senate
-senator
-socialism
-socialist
-stf
-supreme court
-trump
-ukraine
-vaccine mandate
-white house
-```
-
-## Built-In Political Hashtags
-
-```text
-#biden2024
-#bolsonaro
-#democrats
-#elections
-#eleicoes
-#fakenews
-#fora
-#impeachment
-#lula
-#maga
-#politica
-#politics
-#republicans
-#trump2024
-```
+The complete political keyword list, political hashtag list, personal exclusions, work exclusions, and blank custom profile are maintained in [`keyword_profiles.json`](keyword_profiles.json). Use `--keyword-profiles PATH` to load a different profile file.

@@ -229,8 +229,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--delete-all-retweets",
+        "--unretweet-all",
+        dest="delete_all_retweets",
         action="store_true",
-        help="Shortcut for --target retweets --match all --delete.",
+        help="Undo every repost made by the logged-in account.",
     )
     parser.add_argument(
         "--include-replies",
@@ -380,7 +382,8 @@ def post_fingerprint(article: Locator, fallback_text: str = "") -> str:
 def post_kind(article: Locator) -> PostKind:
     text = " ".join(article.inner_text(timeout=2000).split()).lower()
     is_reply = any(marker in text for marker in ("replying to", "em resposta a", "respondendo a"))
-    is_retweet = any(
+    has_active_repost_control = article.locator('[data-testid="unretweet"]').count() > 0
+    is_retweet = has_active_repost_control or any(
         marker in text
         for marker in (
             "reposted",
@@ -395,10 +398,12 @@ def post_kind(article: Locator) -> PostKind:
     return PostKind(is_reply=is_reply, is_retweet=is_retweet)
 
 
-def matches_target(kind: PostKind, target: Target) -> bool:
+def matches_target(kind: PostKind, target: Target, strict_replies: bool = False) -> bool:
     if target == Target.RETWEETS:
         return kind.is_retweet
     if target == Target.REPLIES:
+        if strict_replies:
+            return kind.is_reply and not kind.is_retweet
         return not kind.is_retweet
     return not kind.is_reply and not kind.is_retweet
 
@@ -490,7 +495,7 @@ def delete_post(page: Page, article: Locator, pause: float) -> bool:
 
 
 def undo_retweet(page: Page, article: Locator, pause: float) -> bool:
-    repost_button = article.locator('[data-testid="retweet"]').first
+    repost_button = article.locator('[data-testid="unretweet"], [data-testid="retweet"]').first
     try:
         if not repost_button.is_visible(timeout=1200):
             print("  skip: repost button not found")
@@ -516,8 +521,21 @@ def undo_retweet(page: Page, article: Locator, pause: float) -> bool:
 
 
 def remove_item(page: Page, article: Locator, target: Target, pause: float) -> bool:
-    if target == Target.RETWEETS:
+    try:
+        current_kind = post_kind(article)
+    except TimeoutError:
+        print("  skip: could not verify whether this item is a repost")
+        return False
+
+    if current_kind.is_retweet:
+        print("  checked: repost; using Undo repost")
         return undo_retweet(page, article, pause)
+
+    if target == Target.RETWEETS:
+        print("  checked: repost timeline item; using Undo repost")
+        return undo_retweet(page, article, pause)
+
+    print("  checked: not a repost; using Delete")
     return delete_post(page, article, pause)
 
 
@@ -564,16 +582,15 @@ def scan_and_maybe_delete(
                 kind = post_kind(article)
             except TimeoutError:
                 continue
-            if not matches_target(kind, target):
+            if not matches_target(kind, target, strict_replies=args.delete_all):
                 continue
 
             scanned += 1
             processed_item = True
             if match_mode == MatchMode.ALL:
-                action = "undoing repost" if target == Target.RETWEETS else "deleting"
                 dry_run_action = "undo repost" if target == Target.RETWEETS else "delete"
                 if args.delete:
-                    print(f"[{scanned}] {action}")
+                    print(f"[{scanned}] checking item type before removal")
                     if remove_item(page, article, target, args.pause):
                         removed += 1
                         print("  done")
@@ -639,9 +656,9 @@ def scan_targets(
     results: dict[Target, tuple[int, int]] = {}
     for target in targets:
         args.target = target.value
-        target_label = "posts and replies" if args.delete_all and target == Target.REPLIES else target.value
-        print(f"\nProcessing: {target_label}")
-        open_profile(page, args.profile_url, target, allow_empty=len(targets) > 1)
+        print(f"\nProcessing: {target.value}")
+        navigation_target = Target.REPLIES if args.delete_all else target
+        open_profile(page, args.profile_url, navigation_target, allow_empty=len(targets) > 1)
         if page.locator("article").count() == 0:
             results[target] = (0, 0)
             print(f"No {target.value} timeline cards found; continuing.")
@@ -758,10 +775,9 @@ def main() -> int:
         if args.executable_path:
             print(f"Executable: {args.executable_path}")
         print(f"Profile: {args.browser_profile_dir or default_profile_dir(BrowserName(args.browser))}")
-    # The with_replies timeline contains both original posts and replies. Using
-    # it first avoids a full Posts-only scroll before combined deletion starts.
-    targets = [Target.REPLIES, Target.RETWEETS] if args.delete_all else [Target(args.target)]
-    print(f"Target: {'posts, replies, retweets' if args.delete_all else args.target}")
+    # Combined cleanup stays on with_replies for three ordered passes.
+    targets = [Target.RETWEETS, Target.REPLIES, Target.POSTS] if args.delete_all else [Target(args.target)]
+    print(f"Target: {'retweets, replies, posts' if args.delete_all else args.target}")
     print(f"Match: {args.match}")
     print(f"Scan limit: {args.max_posts if args.max_posts is not None else 'entire timeline'}")
     if MatchMode(args.match) == MatchMode.POLITICS:
@@ -781,8 +797,7 @@ def main() -> int:
         total_scanned += scanned
         total_removed += removed
         action = "unreposted" if target == Target.RETWEETS else "deleted"
-        target_label = "posts and replies" if args.delete_all and target == Target.REPLIES else target.value
-        print(f"Done: scanned {scanned} {target_label}; {action} {removed}.")
+        print(f"Done: scanned {scanned} {target.value}; {action} {removed}.")
     if len(targets) > 1:
         print(f"Total: scanned {total_scanned}; removed {total_removed}.")
     return 0

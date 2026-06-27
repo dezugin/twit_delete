@@ -4,7 +4,7 @@ A Playwright browser-navigation tool for deleting posts and replies from your ow
 
 ## Warning: Delete Everything
 
-**Unsafe and irreversible:** this command deletes every post and reply it can find and undoes every repost. It does not inspect political content and does not ask for confirmation in the terminal. X still displays its normal per-item confirmation dialog, which the tool accepts automatically.
+**Unsafe and irreversible:** on the `/with_replies` screen, this command first undoes every repost it can find, then deletes every remaining reply and original post. It does not inspect political content and does not ask for confirmation in the terminal. X still displays its normal per-item confirmation dialog, which the tool accepts automatically.
 
 With your remote-debugging Chrome window open and logged in, run:
 
@@ -12,7 +12,9 @@ With your remote-debugging Chrome window open and logged in, run:
 python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all
 ```
 
-Items are handled sequentially: find one, remove it, query the updated timeline, then find the next one. Press `Ctrl+C` to stop.
+The processing order is: **unretweet everything**, **delete replies**, then **delete original posts**. Items are handled sequentially: find one, remove it, query the updated `/with_replies` timeline, then find the next one. Press `Ctrl+C` to stop.
+
+Before every removal, the tool checks whether the item is a repost. Reposts always use **Undo repost**; only verified non-reposts enter the **Delete** menu. If the check cannot be completed, the item is skipped.
 
 ## Setup
 
@@ -43,18 +45,12 @@ Confirm that the connection works:
 curl http://127.0.0.1:9222/json/version
 ```
 
-## Command Examples
+## Political Command Examples
 
 Dry-run all political posts without deleting anything:
 
 ```bash
 python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match politics
-```
-
-Delete _all_ posts:
-
-```bash
-python twit_delete.py --profile-url https://x.com/dezugin --connect-cdp http://127.0.0.1:9222 --delete-all
 ```
 
 Delete all political posts:
@@ -75,66 +71,6 @@ Undo all political reposts:
 python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target retweets --match politics --delete
 ```
 
-Dry-run every reply regardless of content:
-
-```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target replies --match all
-```
-
-Delete every original post regardless of content:
-
-```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all-posts
-```
-
-Delete every reply regardless of content:
-
-```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all-replies
-```
-
-Undo every repost regardless of content:
-
-```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all-retweets
-```
-
-Test only the first 25 selected items:
-
-```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match politics --max-posts 25
-```
-
-Add political terms from `keywords.txt` to the built-in keywords:
-
-```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match politics --keywords-file keywords.txt
-```
-
-Use only terms from `keywords.txt`, ignoring all built-in keywords and hashtags:
-
-```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match politics --keywords-file keywords.txt --only-keywords-file
-```
-
-Open a separate persistent Chromium session and pause for manual login:
-
-```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --login
-```
-
-Use a dedicated Firefox session:
-
-```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --browser firefox --login
-```
-
-Run a logged-in persistent session headlessly with a slower action delay:
-
-```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --headless --target posts --match politics --pause 1.5
-```
-
 ## All Options
 
 ```text
@@ -153,10 +89,11 @@ python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --headless --targe
 --login                 Open X login and wait for Enter before scanning.
 --target TYPE           Selected category: posts, replies, or retweets.
 --match MODE            Matching mode: politics or all. Default: politics.
---delete-all            Delete posts/replies and undo reposts without classification.
+--delete-all            On /with_replies: undo reposts, then delete replies/posts.
 --delete-all-posts      Delete every original post regardless of content.
 --delete-all-replies    Delete every reply regardless of content.
 --delete-all-retweets   Undo every repost regardless of content.
+--unretweet-all         Alias for --delete-all-retweets.
 --include-replies       Deprecated alias for --target replies.
 --keywords-file PATH    Add keywords from a text file, one term per line.
 --only-keywords-file    Use only --keywords-file terms; ignore built-ins.
@@ -170,6 +107,7 @@ python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --headless --targe
 - Run a dry-run command before selective political deletion.
 - `--target replies` uses the profile's `/with_replies` timeline.
 - Reposts are removed by undoing your repost, never by deleting the original author's post.
+- Every destructive action re-checks the item type immediately before clicking; an unverified item is skipped.
 - X changes its interface often. Missing menus or confirmation buttons are reported and skipped.
 - Use this tool only on accounts you control.
 

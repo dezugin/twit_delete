@@ -2,19 +2,6 @@
 
 A Playwright browser-navigation tool for cleaning your X account around the parts of life you care about. Remove personal history, clean up work-related posts, filter political content, preserve one profile while deleting another, and undo your reposts. Scans are unlimited unless `--max-posts` is supplied.
 
-## Choose What To Clean
-
-Personal and work cleanup are first-class workflows, not secondary exclusions. Every built-in profile works with both `--match` and `--exclude-mode`.
-
-| Profile | Typical content | Match example | Exclusion example |
-| --- | --- | --- | --- |
-| `personal` | Family, friends, memories, birthdays, vacations, hobbies | Delete old personal posts | Preserve personal posts during another cleanup |
-| `work` | Projects, clients, jobs, hiring, portfolios, conferences | Delete an old professional footprint | Preserve career history |
-| `politics` | Elections, politicians, parties, governments, political hashtags | Delete political posts or replies | Preserve political commentary |
-| `custom` | Your command-line terms or custom files | Match your own topic | Preserve your own topic |
-
-`--match PROFILE` selects content for deletion. `--exclude-mode PROFILE` protects matching owned posts and replies. Repost removal is never blocked by an exclusion profile.
-
 ## Setup
 
 ```bash
@@ -60,24 +47,47 @@ Reposts, replies, and original posts are handled in the order they appear. Each 
 
 Before every removal, the tool checks for an active `unretweet` control. That control means your logged-in account reposted the item; the original post may belong to any account. Those items use **Undo repost** without requiring the original author's permalink to match your handle. Only post and reply deletion requires a permalink matching `/YOUR_HANDLE/status/...`, which prevents conversation cards from other accounts from being deleted. The tool first tries the timeline menu; if that fails, it opens the owned permalink in a temporary tab and retries there.
 
-## Personal And Work Workflows
+## Choose What To Clean
 
-Delete personal posts while preserving work posts:
+Every built-in profile works with both `--match` and `--exclude-mode`.
+
+| Profile    | Typical content                                                  | Match example                        | Exclusion example                              |
+| ---------- | ---------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------- |
+| `personal` | Family, friends, memories, birthdays, vacations, hobbies         | Delete old personal posts            | Preserve personal posts during another cleanup |
+| `work`     | Projects, clients, jobs, hiring, portfolios, conferences         | Delete an old professional footprint | Preserve career history                        |
+| `politics` | Elections, politicians, parties, governments, political hashtags | Delete political posts or replies    | Preserve political commentary                  |
+| `custom`   | Your command-line terms or custom files                          | Match your own topic                 | Preserve your own topic                        |
+
+`--match PROFILE` selects content for deletion. `--exclude-mode PROFILE` protects matching owned posts and replies. Repost removal is never blocked by an exclusion profile.
+
+Dry-run personal posts without deleting anything:
 
 ```bash
-twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match personal --exclude-mode work --delete
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match personal
 ```
 
-Delete work replies while preserving personal replies:
+Delete personal replies while preserving work-related replies:
 
 ```bash
-twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target replies --match work --exclude-mode personal --delete
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target replies --match personal --exclude-mode work --delete
 ```
 
-Preserve personal memories while removing everything else from owned posts and replies:
+Dry-run work-related posts:
 
 ```bash
-twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all --exclude-mode personal
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match work
+```
+
+Delete work-related posts while preserving personal posts:
+
+```bash
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match work --exclude-mode personal --delete
+```
+
+Delete political posts while preserving personal posts:
+
+```bash
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match politics --exclude-mode personal --delete
 ```
 
 Preserve your professional footprint while removing everything else:
@@ -129,38 +139,6 @@ twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.
 ```
 
 Supplying `--exclude-keywords` without `--exclude-mode` automatically uses custom exclusion mode.
-
-## Profile Command Guide
-
-Dry-run personal posts without deleting anything:
-
-```bash
-twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match personal
-```
-
-Delete personal replies while preserving work-related replies:
-
-```bash
-twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target replies --match personal --exclude-mode work --delete
-```
-
-Dry-run work-related posts:
-
-```bash
-twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match work
-```
-
-Delete work-related posts while preserving personal posts:
-
-```bash
-twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match work --exclude-mode personal --delete
-```
-
-Delete political posts while preserving personal posts:
-
-```bash
-twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match politics --exclude-mode personal --delete
-```
 
 ## All Options
 

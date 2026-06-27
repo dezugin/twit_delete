@@ -31,22 +31,11 @@ Internal modules use package-relative imports. Run the installed `twit-cleaner` 
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install --editable .
+python -m pip install twit-cleaner
 python -m playwright install chromium firefox
 twit-cleaner --help
 python -m twit_cleaner --help
 ```
-
-## Build A Wheel
-
-```bash
-python -m pip install build
-python -m build
-python -m pip install --force-reinstall dist/twit_cleaner-0.1.0-py3-none-any.whl
-twit-cleaner --help
-```
-
-The build creates both a wheel and source distribution under `dist/`.
 
 ## Existing Chrome Login
 

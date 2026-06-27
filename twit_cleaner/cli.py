@@ -10,7 +10,7 @@ from .models import BrowserName, ExclusionMode, MatchMode, Target
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Delete X/Twitter posts that look political by navigating the website."
+        description="Delete matching X/Twitter posts by navigating the website."
     )
     parser.add_argument("--profile-url", required=True, help="Profile URL to scan, e.g. https://x.com/me")
     parser.add_argument(
@@ -60,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--match",
         choices=[mode.value for mode in MatchMode],
         default=MatchMode.POLITICS.value,
-        help="Delete only political matches, or every item in the selected target.",
+        help="Match politics, personal, work, custom terms, or every selected item.",
     )
     parser.add_argument(
         "--delete-all",
@@ -90,25 +90,46 @@ def build_parser() -> argparse.ArgumentParser:
         help="Deprecated alias for --target replies.",
     )
     parser.add_argument(
+        "--match-keywords-file",
         "--keywords-file",
+        dest="match_keywords_file",
         type=Path,
-        help="Text file with extra political keywords, one per line. Lines starting with # are ignored.",
+        help="Extra/custom match terms separated by spaces or newlines; prefix hashtags with #.",
+    )
+    parser.add_argument(
+        "--exclude-keywords-file",
+        type=Path,
+        help="Extra/custom exclusion terms separated by spaces or newlines; prefix hashtags with #.",
+    )
+    parser.add_argument(
+        "--match-keywords",
+        nargs="+",
+        default=[],
+        metavar="TERM",
+        help="Match terms written directly on the command; quote phrases and #hashtags.",
+    )
+    parser.add_argument(
+        "--exclude-keywords",
+        nargs="+",
+        default=[],
+        metavar="TERM",
+        help="Exclusion terms written directly on the command; quote phrases and #hashtags.",
     )
     parser.add_argument(
         "--keyword-profiles",
         type=Path,
         default=DEFAULT_KEYWORD_PROFILES_PATH,
-        help="JSON file containing political terms and exclusion profiles.",
+        help="JSON file containing the politics, personal, and work profiles.",
     )
     parser.add_argument(
         "--exclude-mode",
         choices=[mode.value for mode in ExclusionMode],
-        help="Keep posts/replies matching the personal, work, or custom exclusion profile.",
+        help="Keep posts/replies matching politics, personal, work, or custom terms.",
     )
     parser.add_argument(
         "--only-keywords-file",
         action="store_true",
-        help="Use only --keywords-file keywords instead of the built-in list.",
+        help="Deprecated shortcut for --match custom with --match-keywords-file.",
     )
     parser.add_argument("--pause", type=float, default=0.8, help="Seconds to pause between browser actions")
     return parser
@@ -137,6 +158,12 @@ def apply_shortcuts(args: argparse.Namespace) -> argparse.Namespace:
         args.delete = True
     elif args.include_replies:
         args.target = Target.REPLIES.value
+    if args.only_keywords_file:
+        if args.match == MatchMode.ALL.value:
+            raise ValueError("--only-keywords-file cannot be combined with an all-items shortcut.")
+        args.match = MatchMode.CUSTOM.value
+    if (args.exclude_keywords_file or args.exclude_keywords) and not args.exclude_mode:
+        args.exclude_mode = ExclusionMode.CUSTOM.value
     return args
 
 
@@ -156,8 +183,14 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--browser-channel is only supported with --browser chromium.")
     if args.browser_channel and args.executable_path:
         raise ValueError("Use either --browser-channel or --executable-path, not both.")
-    if args.only_keywords_file and not args.keywords_file:
-        raise ValueError("--only-keywords-file requires --keywords-file")
+    if args.match == MatchMode.CUSTOM.value and not (args.match_keywords_file or args.match_keywords):
+        raise ValueError("--match custom requires --match-keywords-file or --match-keywords")
+    if args.exclude_mode == ExclusionMode.CUSTOM.value and not (
+        args.exclude_keywords_file or args.exclude_keywords
+    ):
+        raise ValueError(
+            "--exclude-mode custom requires --exclude-keywords-file or --exclude-keywords"
+        )
     if args.max_posts is not None and args.max_posts < 1:
         raise ValueError("--max-posts must be at least 1")
 
@@ -166,4 +199,3 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     args = apply_shortcuts(build_parser().parse_args(argv))
     validate_args(args)
     return args
-

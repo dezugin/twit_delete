@@ -13,6 +13,9 @@ class Target(str, Enum):
 
 class MatchMode(str, Enum):
     POLITICS = "politics"
+    PERSONAL = "personal"
+    WORK = "work"
+    CUSTOM = "custom"
     ALL = "all"
 
 
@@ -22,6 +25,7 @@ class BrowserName(str, Enum):
 
 
 class ExclusionMode(str, Enum):
+    POLITICS = "politics"
     PERSONAL = "personal"
     WORK = "work"
     CUSTOM = "custom"
@@ -41,8 +45,8 @@ class PostKind:
 
 @dataclass(frozen=True)
 class KeywordRules:
-    political_keywords: frozenset[str]
-    political_hashtags: frozenset[str]
+    match_keywords: frozenset[str]
+    match_hashtags: frozenset[str]
     exclusion_keywords: frozenset[str]
     exclusion_hashtags: frozenset[str]
 

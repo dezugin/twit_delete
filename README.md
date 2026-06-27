@@ -1,6 +1,6 @@
 # Twit Cleaner
 
-A Playwright browser-navigation tool for deleting posts and replies from your own X account and undoing your reposts. Political matching is keyword based. Scans are unlimited unless `--max-posts` is supplied.
+A Playwright browser-navigation tool for deleting posts and replies from your own X account and undoing your reposts. Profile matching is keyword based. Scans are unlimited unless `--max-posts` is supplied.
 
 ## Project Structure
 
@@ -8,7 +8,7 @@ A Playwright browser-navigation tool for deleting posts and replies from your ow
 pyproject.toml              Build metadata, dependencies, and CLI entrypoints
 twit_cleaner/
   __main__.py               Package entrypoint for python -m twit_cleaner
-  keyword_profiles.json     Bundled political terms and exclusion profiles
+  keyword_profiles.json     Bundled politics, personal, and work profiles
   app.py                    Application orchestration and exit codes
   cli.py                    Arguments, shortcuts, and validation
   models.py                 Enums and immutable runtime models
@@ -71,32 +71,69 @@ Reposts, replies, and original posts are handled in the order they appear. Each 
 
 Before every removal, the tool checks for an active `unretweet` control. That control means your logged-in account reposted the item; the original post may belong to any account. Those items use **Undo repost** without requiring the original author's permalink to match your handle. Only post and reply deletion requires a permalink matching `/YOUR_HANDLE/status/...`, which prevents conversation cards from other accounts from being deleted. The tool first tries the timeline menu; if that fails, it opens the owned permalink in a temporary tab and retries there.
 
-## Exclusion Modes
+## Match And Exclusion Profiles
 
-Exclusion modes preserve owned posts and replies containing configured words or hashtags. They do not prevent the tool from undoing your reposts.
+The built-in `politics`, `personal`, and `work` profiles can be used for either matching or exclusion:
 
-- `--exclude-mode personal` keeps content matching the `personal` profile.
-- `--exclude-mode work` keeps content matching the `work` profile.
-- `--exclude-mode custom` keeps content matching your personalized `custom` profile.
+- `--match PROFILE` selects content to delete.
+- `--exclude-mode PROFILE` preserves matching owned posts and replies.
+- Exclusions never prevent the tool from undoing your reposts.
 
-All terms are stored in [`twit_cleaner/keyword_profiles.json`](twit_cleaner/keyword_profiles.json), outside the Python code. The `custom` profile intentionally starts with blank `keywords` and `hashtags` lists. In a source checkout, edit those lists to personalize what the tool should preserve:
-
-```json
-"custom": {
-  "keywords": ["my project", "family name"],
-  "hashtags": ["keepme", "portfolio"]
-}
-```
-
-Then add the custom exclusion mode to the delete-all command:
+Delete personal posts while preserving work posts:
 
 ```bash
-twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all --exclude-mode custom
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match personal --exclude-mode work --delete
 ```
 
-Keywords are case-insensitive. Hashtags may be written with or without `#` in the JSON file.
+Delete work replies while preserving political replies:
 
-For a pip-installed copy, keep your personalized JSON outside `site-packages` and pass it with `--keyword-profiles PATH`. This prevents upgrades from replacing your customization.
+```bash
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target replies --match work --exclude-mode politics --delete
+```
+
+The built-in terms live in [`twit_cleaner/keyword_profiles.json`](twit_cleaner/keyword_profiles.json). Use `--keyword-profiles PATH` to replace all three built-in profiles.
+
+## Custom Keyword Files
+
+Custom terms are stored outside the JSON. Use one file for matching and another for exclusion. Terms may be separated by spaces or newlines, are case-insensitive, and become hashtags when prefixed with `#`. Lines beginning with `//` are comments.
+
+Edit [`custom_match_keywords.txt`](custom_match_keywords.txt):
+
+```text
+football gaming photography
+#sports #games
+```
+
+Edit [`custom_exclusion_keywords.txt`](custom_exclusion_keywords.txt):
+
+```text
+family portfolio birthday
+#keepme #work
+```
+
+Use both custom files:
+
+```bash
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match custom --match-keywords-file ./custom_match_keywords.txt --exclude-mode custom --exclude-keywords-file ./custom_exclusion_keywords.txt --delete
+```
+
+Custom whitespace-separated files treat `project` and `name` as two terms. Put multi-word phrases in a replacement JSON profile when phrase matching is required. Keep personalized files outside `site-packages` so package upgrades cannot overwrite them.
+
+## Keywords On The Command Line
+
+Use `--match-keywords` and `--exclude-keywords` for terms that do not need a file. Each shell argument is one term, so quote phrases and hashtags:
+
+```bash
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match custom --match-keywords election "prime minister" "#politics" --exclude-keywords family "family photo" "#keepme" --delete
+```
+
+Inline terms augment a selected built-in profile. For example, this matches the built-in work profile plus `freelance`:
+
+```bash
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match work --match-keywords freelance --delete
+```
+
+Supplying `--exclude-keywords` without `--exclude-mode` automatically uses custom exclusion mode.
 
 ## Political Command Examples
 
@@ -141,17 +178,25 @@ twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.
 --connect-cdp URL       Attach to running Chrome/Chromium through CDP.
 --login                 Open X login and wait for Enter before scanning.
 --target TYPE           Selected category: posts, replies, or retweets.
---match MODE            Matching mode: politics or all. Default: politics.
+--match MODE            Match politics, personal, work, custom, or all.
 --delete-all            Interleave repost undo and owned post/reply deletion.
 --delete-all-posts      Delete every original post regardless of content.
 --delete-all-replies    Delete every reply regardless of content.
 --delete-all-retweets   Undo every repost regardless of content.
 --unretweet-all         Alias for --delete-all-retweets.
 --include-replies       Deprecated alias for --target replies.
---keywords-file PATH    Add keywords from a text file, one term per line.
---keyword-profiles PATH JSON file containing political and exclusion profiles.
---only-keywords-file    Use only --keywords-file terms; ignore built-ins.
---exclude-mode MODE     Preserve matches from personal, work, or custom.
+--match-keywords-file PATH
+                        Add/customize match terms separated by spaces or newlines.
+--keywords-file PATH    Compatibility alias for --match-keywords-file.
+--exclude-keywords-file PATH
+                        Add/customize exclusion terms separated by spaces or newlines.
+--match-keywords TERM [TERM ...]
+                        Add match terms directly; quote phrases and #hashtags.
+--exclude-keywords TERM [TERM ...]
+                        Add exclusion terms directly; quote phrases and #hashtags.
+--keyword-profiles PATH JSON file containing politics, personal, and work profiles.
+--only-keywords-file    Deprecated shortcut for --match custom.
+--exclude-mode MODE     Preserve politics, personal, work, or custom matches.
 --pause SECONDS         Delay between browser actions. Default: 0.8.
 ```
 
@@ -159,7 +204,7 @@ twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.
 
 ## Notes
 
-- Run a dry-run command before selective political deletion.
+- Run a dry-run command before selective deletion.
 - `--target replies` uses the profile's `/with_replies` timeline.
 - Reposts are removed by undoing your repost, never by deleting the original author's post.
 - Reposts made by the logged-in account are undone regardless of who authored the original post.
@@ -172,4 +217,4 @@ twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.
 
 ## Keyword Profiles
 
-The complete political keyword list, political hashtag list, personal exclusions, work exclusions, and blank custom profile are maintained in [`twit_cleaner/keyword_profiles.json`](twit_cleaner/keyword_profiles.json). Use `--keyword-profiles PATH` to load a different profile file.
+The complete `politics`, `personal`, and `work` keyword and hashtag profiles are maintained in [`twit_cleaner/keyword_profiles.json`](twit_cleaner/keyword_profiles.json). Each profile can be used with either `--match` or `--exclude-mode`. Custom terms belong in the separate match and exclusion text files.

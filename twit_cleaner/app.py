@@ -6,20 +6,25 @@ from typing import Sequence
 
 from .browser import default_profile_dir, run_browser
 from .cli import parse_args
-from .keywords import load_keyword_file, load_keyword_rules
+from .keywords import load_keyword_rules
 from .models import BrowserName, BrowserOptions, MatchMode, ScanOptions, Target
 
 
 def build_runtime(args: argparse.Namespace) -> tuple[BrowserOptions, ScanOptions, set[str], set[str], list[Target]]:
-    rules = load_keyword_rules(args.keyword_profiles, args.exclude_mode)
-    extra_keywords = load_keyword_file(args.keywords_file)
-    keywords = set() if args.only_keywords_file else set(rules.political_keywords)
-    hashtags = set() if args.only_keywords_file else set(rules.political_hashtags)
-    keywords.update(extra_keywords)
-
     match_mode = MatchMode(args.match)
-    if match_mode == MatchMode.POLITICS and not keywords and not hashtags:
-        raise ValueError("No political keywords or hashtags configured.")
+    rules = load_keyword_rules(
+        args.keyword_profiles,
+        args.match,
+        args.exclude_mode,
+        args.match_keywords_file,
+        args.exclude_keywords_file,
+        args.match_keywords,
+        args.exclude_keywords,
+    )
+    keywords = set(rules.match_keywords)
+    hashtags = set(rules.match_hashtags)
+    if match_mode != MatchMode.ALL and not keywords and not hashtags:
+        raise ValueError(f"No keywords or hashtags configured for match profile '{args.match}'.")
 
     browser_options = BrowserOptions(
         browser=BrowserName(args.browser),
@@ -72,7 +77,7 @@ def print_run_summary(
             f"{len(scan_options.exclusion_hashtags)} hashtags)"
         )
     print(f"Scan limit: {scan_options.max_posts if scan_options.max_posts is not None else 'entire timeline'}")
-    if scan_options.match_mode == MatchMode.POLITICS:
+    if scan_options.match_mode != MatchMode.ALL:
         print(f"Keywords loaded: {len(keywords)}")
     print("Use Ctrl+C to stop at any time.")
 
@@ -107,4 +112,3 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     print_results(results, targets, scan_options.delete_all)
     return 0
-

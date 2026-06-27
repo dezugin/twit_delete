@@ -63,50 +63,44 @@
       "trump2024"
     ]
   },
-  "exclusions": {
-    "personal": {
-      "keywords": [
-        "anniversary",
-        "birthday",
-        "family",
-        "friends",
-        "hobby",
-        "memories",
-        "personal",
-        "vacation",
-        "wedding"
-      ],
-      "hashtags": [
-        "birthday",
-        "family",
-        "memories",
-        "personal"
-      ]
-    },
-    "work": {
-      "keywords": [
-        "business",
-        "career",
-        "client",
-        "conference",
-        "hiring",
-        "job",
-        "portfolio",
-        "professional",
-        "project",
-        "work"
-      ],
-      "hashtags": [
-        "business",
-        "career",
-        "hiring",
-        "portfolio",
-        "work"
-      ]
-    },
-    "custom": {
-      "keywords": [],
-      "hashtags": []
-    }
+  "personal": {
+    "keywords": [
+      "anniversary",
+      "birthday",
+      "family",
+      "friends",
+      "hobby",
+      "memories",
+      "personal",
+      "vacation",
+      "wedding"
+    ],
+    "hashtags": [
+      "birthday",
+      "family",
+      "memories",
+      "personal"
+    ]
+  },
+  "work": {
+    "keywords": [
+      "business",
+      "career",
+      "client",
+      "conference",
+      "hiring",
+      "job",
+      "portfolio",
+      "professional",
+      "project",
+      "work"
+    ],
+    "hashtags": [
+      "business",
+      "career",
+      "hiring",
+      "portfolio",
+      "work"
+    ]
   }
 }

@@ -23,7 +23,6 @@ classifiers = [
 ]
 
 [project.urls]
-[project.urls]
 Homepage = "https://github.com/dezugin/twit_cleaner"
 Repository = "https://github.com/dezugin/twit_cleaner"
 Issues = "https://github.com/dezugin/twit_cleaner/issues"

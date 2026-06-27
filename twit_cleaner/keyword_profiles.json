@@ -4,8 +4,6 @@
       "abortion",
       "biden",
       "bolsonaro",
-      "brasil",
-      "brazil",
       "congress",
       "conservative",
       "democrat",
@@ -19,6 +17,7 @@
       "governador",
       "governor",
       "impeachment",
+      "israel",
       "leftist",
       "liberal",
       "lula",
@@ -26,6 +25,7 @@
       "mayor",
       "minister",
       "ministro",
+      "palestine",
       "parliament",
       "politica",
       "política",
@@ -75,12 +75,7 @@
       "vacation",
       "wedding"
     ],
-    "hashtags": [
-      "birthday",
-      "family",
-      "memories",
-      "personal"
-    ]
+    "hashtags": ["birthday", "family", "memories", "personal"]
   },
   "work": {
     "keywords": [
@@ -95,12 +90,6 @@
       "project",
       "work"
     ],
-    "hashtags": [
-      "business",
-      "career",
-      "hiring",
-      "portfolio",
-      "work"
-    ]
+    "hashtags": ["business", "career", "hiring", "portfolio", "work"]
   }
 }

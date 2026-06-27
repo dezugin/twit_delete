@@ -1,14 +1,14 @@
-# Twit Delete
+# Twit Cleaner
 
 A Playwright browser-navigation tool for deleting posts and replies from your own X account and undoing your reposts. Political matching is keyword based. Scans are unlimited unless `--max-posts` is supplied.
 
 ## Project Structure
 
 ```text
-twit_delete.py              Minimal command-line entrypoint
-keyword_profiles.json       Political terms and editable exclusion profiles
+pyproject.toml              Build metadata, dependencies, and CLI entrypoints
 twit_cleaner/
   __main__.py               Package entrypoint for python -m twit_cleaner
+  keyword_profiles.json     Bundled political terms and exclusion profiles
   app.py                    Application orchestration and exit codes
   cli.py                    Arguments, shortcuts, and validation
   models.py                 Enums and immutable runtime models
@@ -24,16 +24,29 @@ tests/
   test_domain.py            Ownership, mode, CLI, and keyword contracts
 ```
 
-Internal modules use package-relative imports, while `twit_delete.py` only imports and runs `twit_cleaner.app.main`.
+Internal modules use package-relative imports. Run the installed `twit-cleaner` command or invoke the package directly with `python -m twit_cleaner`.
 
 ## Setup
 
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install --editable .
 python -m playwright install chromium firefox
+twit-cleaner --help
+python -m twit_cleaner --help
 ```
+
+## Build A Wheel
+
+```bash
+python -m pip install build
+python -m build
+python -m pip install --force-reinstall dist/twit_cleaner-0.1.0-py3-none-any.whl
+twit-cleaner --help
+```
+
+The build creates both a wheel and source distribution under `dist/`.
 
 ## Existing Chrome Login
 
@@ -62,7 +75,7 @@ curl http://127.0.0.1:9222/json/version
 With your remote-debugging Chrome window open and logged in, run:
 
 ```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all
 ```
 
 Reposts, replies, and original posts are handled in the order they appear. Each item is processed sequentially: find one, choose Undo repost or Delete, act on it, query the updated `/with_replies` timeline, then find the next one. If one of your own posts is also reposted, the tool undoes the repost first, then sees the same owned permalink again and deletes the post. Press `Ctrl+C` to stop.
@@ -77,7 +90,7 @@ Exclusion modes preserve owned posts and replies containing configured words or 
 - `--exclude-mode work` keeps content matching the `work` profile.
 - `--exclude-mode custom` keeps content matching your personalized `custom` profile.
 
-All terms are stored in [`keyword_profiles.json`](keyword_profiles.json), outside the Python script. The `custom` profile intentionally starts with blank `keywords` and `hashtags` lists. Edit those lists to personalize what the tool should preserve:
+All terms are stored in [`twit_cleaner/keyword_profiles.json`](twit_cleaner/keyword_profiles.json), outside the Python code. The `custom` profile intentionally starts with blank `keywords` and `hashtags` lists. In a source checkout, edit those lists to personalize what the tool should preserve:
 
 ```json
 "custom": {
@@ -89,35 +102,37 @@ All terms are stored in [`keyword_profiles.json`](keyword_profiles.json), outsid
 Then add the custom exclusion mode to the delete-all command:
 
 ```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all --exclude-mode custom
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all --exclude-mode custom
 ```
 
 Keywords are case-insensitive. Hashtags may be written with or without `#` in the JSON file.
+
+For a pip-installed copy, keep your personalized JSON outside `site-packages` and pass it with `--keyword-profiles PATH`. This prevents upgrades from replacing your customization.
 
 ## Political Command Examples
 
 Dry-run all political posts without deleting anything:
 
 ```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match politics
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match politics
 ```
 
 Delete all political posts:
 
 ```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match politics --delete
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target posts --match politics --delete
 ```
 
 Delete all political replies:
 
 ```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target replies --match politics --delete
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target replies --match politics --delete
 ```
 
 Undo all political reposts:
 
 ```bash
-python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target retweets --match politics --delete
+twit-cleaner --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --target retweets --match politics --delete
 ```
 
 ## All Options
@@ -168,4 +183,4 @@ python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http
 
 ## Keyword Profiles
 
-The complete political keyword list, political hashtag list, personal exclusions, work exclusions, and blank custom profile are maintained in [`keyword_profiles.json`](keyword_profiles.json). Use `--keyword-profiles PATH` to load a different profile file.
+The complete political keyword list, political hashtag list, personal exclusions, work exclusions, and blank custom profile are maintained in [`twit_cleaner/keyword_profiles.json`](twit_cleaner/keyword_profiles.json). Use `--keyword-profiles PATH` to load a different profile file.

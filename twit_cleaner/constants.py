@@ -1,8 +1,7 @@
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_KEYWORD_PROFILES_PATH = PROJECT_ROOT / "keyword_profiles.json"
+DEFAULT_KEYWORD_PROFILES_PATH = Path(__file__).with_name("keyword_profiles.json")
 
 MENU_LABELS = ("More", "Mais", "More options", "Mais opcoes", "Mais opções")
 DELETE_LABELS = ("Delete", "Excluir", "Delete post", "Excluir post", "Delete Tweet", "Excluir Tweet")
@@ -15,4 +14,3 @@ UNREPOST_LABELS = (
     "Desfazer repost",
     "Desfazer Retweet",
 )
-

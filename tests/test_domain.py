@@ -9,6 +9,7 @@ from twit_cleaner.urls import canonical_owned_status_url
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+KEYWORD_PROFILES = PROJECT_ROOT / "twit_cleaner" / "keyword_profiles.json"
 
 
 class DomainTests(unittest.TestCase):
@@ -36,7 +37,7 @@ class DomainTests(unittest.TestCase):
         self.assertFalse(exclusions_apply(Target.RETWEETS, "custom"))
 
     def test_keyword_profiles_and_custom_defaults(self) -> None:
-        rules = load_keyword_rules(PROJECT_ROOT / "keyword_profiles.json", "custom")
+        rules = load_keyword_rules(KEYWORD_PROFILES, "custom")
         self.assertEqual(len(rules.political_keywords), 44)
         self.assertEqual(len(rules.political_hashtags), 14)
         self.assertFalse(rules.exclusion_keywords)

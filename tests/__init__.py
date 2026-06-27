@@ -1,2 +1,1 @@
-"""Twit Delete tests."""
-
+"""Twit Cleaner tests."""

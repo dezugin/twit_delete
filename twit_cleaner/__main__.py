@@ -1,4 +1,4 @@
-"""Run Twit Delete as a Python package."""
+"""Run Twit Cleaner as a Python package."""
 
 from .app import main
 

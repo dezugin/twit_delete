@@ -23,8 +23,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install build tools
-        run: python -m pip install build twine
+      - name: Install project and build tools
+        run: python -m pip install --upgrade build twine .
 
       - name: Run tests
         run: python -m unittest discover -v

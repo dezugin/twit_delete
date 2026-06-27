@@ -19,7 +19,14 @@ from typing import Iterable
 from urllib.parse import urlsplit, urlunsplit
 
 try:
-    from playwright.sync_api import BrowserContext, Locator, Page, TimeoutError, sync_playwright
+    from playwright.sync_api import (
+        BrowserContext,
+        Error as PlaywrightError,
+        Locator,
+        Page,
+        TimeoutError,
+        sync_playwright,
+    )
 except ModuleNotFoundError as exc:
     if exc.name != "playwright":
         raise
@@ -298,6 +305,26 @@ def origin_from_url(profile_url: str) -> str:
     return urlunsplit((scheme, netloc, "", "", ""))
 
 
+def profile_handle(profile_url: str) -> str:
+    parts = [part for part in urlsplit(profile_url).path.split("/") if part]
+    return parts[0].lower() if parts else ""
+
+
+def canonical_owned_status_url(href: str | None, profile_url: str) -> str | None:
+    if not href:
+        return None
+    path = urlsplit(href).path
+    parts = [part for part in path.split("/") if part]
+    if (
+        len(parts) < 3
+        or parts[0].lower() != profile_handle(profile_url)
+        or parts[1] != "status"
+        or not parts[2].isdigit()
+    ):
+        return None
+    return f"{origin_from_url(profile_url)}/{parts[0]}/status/{parts[2]}"
+
+
 def default_profile_dir(browser: BrowserName) -> Path:
     if browser == BrowserName.FIREFOX:
         return Path(".browser-profile-firefox")
@@ -379,12 +406,43 @@ def post_fingerprint(article: Locator, fallback_text: str = "") -> str:
     return " ".join(article.inner_text(timeout=2000).split())
 
 
+def owned_status_url(article: Locator, profile_url: str) -> str | None:
+    timestamp_links = article.locator('a:has(time)[href*="/status/"]')
+    if timestamp_links.count() == 0:
+        return None
+    return canonical_owned_status_url(timestamp_links.first.get_attribute("href"), profile_url)
+
+
+def active_unretweet_button(article: Locator) -> Locator | None:
+    buttons = article.locator('[data-testid="unretweet"]')
+    for index in range(buttons.count()):
+        button = buttons.nth(index)
+        try:
+            if button.is_visible(timeout=400) and button.is_enabled(timeout=400):
+                return button
+        except PlaywrightError:
+            continue
+    return None
+
+
+def combined_action_target(has_active_unretweet: bool, status_url: str | None) -> Target | None:
+    if has_active_unretweet:
+        return Target.RETWEETS
+    if status_url:
+        return Target.POSTS
+    return None
+
+
 def post_kind(article: Locator) -> PostKind:
     text = " ".join(article.inner_text(timeout=2000).split()).lower()
     is_reply = any(marker in text for marker in ("replying to", "em resposta a", "respondendo a"))
-    has_active_repost_control = article.locator('[data-testid="unretweet"]').count() > 0
+    has_active_repost_control = active_unretweet_button(article) is not None
+    social_contexts = article.locator('[data-testid="socialContext"]')
+    social_context = " ".join(
+        social_contexts.nth(index).inner_text(timeout=800) for index in range(social_contexts.count())
+    ).lower()
     is_retweet = has_active_repost_control or any(
-        marker in text
+        marker in social_context
         for marker in (
             "reposted",
             "repostou",
@@ -466,10 +524,21 @@ def open_profile(page: Page, profile_url: str, target: Target, allow_empty: bool
 def delete_post(page: Page, article: Locator, pause: float) -> bool:
     menu_button = first_visible_by_labels(article, "button", MENU_LABELS)
     if not menu_button:
+        testid_menu = article.locator('[data-testid="caret"]').first
+        try:
+            if testid_menu.is_visible(timeout=1200):
+                menu_button = testid_menu
+        except PlaywrightError:
+            pass
+    if not menu_button:
         print("  skip: post menu not found")
         return False
 
-    menu_button.click()
+    try:
+        menu_button.click(timeout=3000)
+    except PlaywrightError:
+        print("  skip: post menu could not be clicked")
+        return False
     time.sleep(pause)
 
     delete_item = first_visible_by_labels(page, "menuitem", DELETE_LABELS, timeout=1200)
@@ -480,31 +549,86 @@ def delete_post(page: Page, article: Locator, pause: float) -> bool:
         print("  skip: delete action not found")
         return False
 
-    delete_item.click()
+    try:
+        delete_item.click(timeout=3000)
+    except PlaywrightError:
+        page.keyboard.press("Escape")
+        print("  skip: delete action could not be clicked")
+        return False
     time.sleep(pause)
 
     confirm_button = first_visible_by_labels(page, "button", CONFIRM_DELETE_LABELS, timeout=2500)
+    if not confirm_button:
+        testid_confirm = page.locator('[data-testid="confirmationSheetConfirm"]').first
+        try:
+            if testid_confirm.is_visible(timeout=1200):
+                confirm_button = testid_confirm
+        except PlaywrightError:
+            pass
     if not confirm_button:
         page.keyboard.press("Escape")
         print("  skip: confirmation button not found")
         return False
 
-    confirm_button.click()
+    try:
+        confirm_button.click(timeout=3000)
+    except PlaywrightError:
+        page.keyboard.press("Escape")
+        print("  skip: confirmation button could not be clicked")
+        return False
     time.sleep(pause)
     return True
 
 
-def undo_retweet(page: Page, article: Locator, pause: float) -> bool:
-    repost_button = article.locator('[data-testid="unretweet"], [data-testid="retweet"]').first
+def article_for_status(page: Page, status_url: str) -> Locator | None:
+    target_path = urlsplit(status_url).path.rstrip("/")
+    articles = page.locator("article")
+    for article_index in range(articles.count()):
+        article = articles.nth(article_index)
+        links = article.locator('a[href*="/status/"]')
+        for link_index in range(links.count()):
+            href = links.nth(link_index).get_attribute("href")
+            if href and urlsplit(href).path.rstrip("/") == target_path:
+                return article
+    return None
+
+
+def delete_post_at_permalink(page: Page, status_url: str, pause: float) -> bool:
+    detail_page = page.context.new_page()
     try:
-        if not repost_button.is_visible(timeout=1200):
-            print("  skip: repost button not found")
+        print(f"  fallback: opening {status_url}")
+        detail_page.goto(status_url, wait_until="domcontentloaded", timeout=60_000)
+        detail_page.locator("article").first.wait_for(state="visible", timeout=15_000)
+        article = article_for_status(detail_page, status_url)
+        if not article:
+            print("  skip: owned post was not found on its permalink page")
             return False
-    except TimeoutError:
-        print("  skip: repost button not found")
+        if delete_post(detail_page, article, pause):
+            print("  fallback: deleted from permalink page")
+            return True
+        print("  skip: permalink deletion also failed")
+        return False
+    except PlaywrightError:
+        print("  skip: permalink page could not be loaded or became stale")
+        return False
+    finally:
+        try:
+            detail_page.close()
+        except PlaywrightError:
+            pass
+
+
+def undo_retweet(page: Page, article: Locator, pause: float) -> bool:
+    repost_button = active_unretweet_button(article)
+    if not repost_button:
+        print("  skip: active Undo repost control not found")
+        return False
+    try:
+        repost_button.click(timeout=3000)
+    except PlaywrightError:
+        print("  skip: active Undo repost control was unavailable or became stale")
         return False
 
-    repost_button.click()
     time.sleep(pause)
 
     undo_item = first_visible_by_labels(page, "menuitem", UNREPOST_LABELS, timeout=1800)
@@ -515,28 +639,38 @@ def undo_retweet(page: Page, article: Locator, pause: float) -> bool:
         print("  skip: undo repost action not found")
         return False
 
-    undo_item.click()
+    try:
+        undo_item.click(timeout=3000)
+    except PlaywrightError:
+        page.keyboard.press("Escape")
+        print("  skip: Undo repost action could not be clicked")
+        return False
     time.sleep(pause)
     return True
 
 
-def remove_item(page: Page, article: Locator, target: Target, pause: float) -> bool:
-    try:
-        current_kind = post_kind(article)
-    except TimeoutError:
-        print("  skip: could not verify whether this item is a repost")
-        return False
-
-    if current_kind.is_retweet:
+def remove_item(
+    page: Page,
+    article: Locator,
+    target: Target,
+    pause: float,
+    status_url: str | None = None,
+) -> bool:
+    if active_unretweet_button(article):
         print("  checked: repost; using Undo repost")
         return undo_retweet(page, article, pause)
 
     if target == Target.RETWEETS:
-        print("  checked: repost timeline item; using Undo repost")
-        return undo_retweet(page, article, pause)
+        print("  skip: item has no active Undo repost control")
+        return False
 
     print("  checked: not a repost; using Delete")
-    return delete_post(page, article, pause)
+    if delete_post(page, article, pause):
+        return True
+    if status_url:
+        return delete_post_at_permalink(page, status_url, pause)
+    print("  skip: no owned permalink was available for fallback")
+    return False
 
 
 def scan_and_maybe_delete(
@@ -568,8 +702,9 @@ def scan_and_maybe_delete(
 
             article = articles.nth(index)
             try:
-                fingerprint = post_fingerprint(article)
-            except TimeoutError:
+                status_url = owned_status_url(article, args.profile_url)
+                fingerprint = status_url or post_fingerprint(article)
+            except PlaywrightError:
                 continue
 
             if not fingerprint or fingerprint in seen_cards:
@@ -578,22 +713,33 @@ def scan_and_maybe_delete(
             seen_cards.add(fingerprint)
             made_progress = True
 
-            try:
-                kind = post_kind(article)
-            except TimeoutError:
-                continue
-            if not matches_target(kind, target, strict_replies=args.delete_all):
-                continue
+            action_target = target
+            if args.delete_all:
+                combined_target = combined_action_target(active_unretweet_button(article) is not None, status_url)
+                if not combined_target:
+                    continue
+                action_target = combined_target
+            else:
+                try:
+                    kind = post_kind(article)
+                except PlaywrightError:
+                    continue
+                if not matches_target(kind, target):
+                    continue
 
             scanned += 1
             processed_item = True
             if match_mode == MatchMode.ALL:
-                dry_run_action = "undo repost" if target == Target.RETWEETS else "delete"
+                dry_run_action = "undo repost" if action_target == Target.RETWEETS else "delete"
                 if args.delete:
                     print(f"[{scanned}] checking item type before removal")
-                    if remove_item(page, article, target, args.pause):
+                    if status_url:
+                        print(f"  owned: {status_url}")
+                    if remove_item(page, article, action_target, args.pause, status_url):
                         removed += 1
                         print("  done")
+                        if action_target == Target.RETWEETS and status_url:
+                            seen_cards.discard(fingerprint)
                 else:
                     print(f"[{scanned}] dry-run: would {dry_run_action}")
                 time.sleep(args.pause)
@@ -614,7 +760,7 @@ def scan_and_maybe_delete(
             print(f"  reasons: {', '.join(match.reasons)}")
 
             if args.delete:
-                if remove_item(page, article, target, args.pause):
+                if remove_item(page, article, action_target, args.pause, status_url):
                     removed += 1
                     action = "unreposted" if target == Target.RETWEETS else "deleted"
                     print(f"  {action}")
@@ -656,12 +802,13 @@ def scan_targets(
     results: dict[Target, tuple[int, int]] = {}
     for target in targets:
         args.target = target.value
-        print(f"\nProcessing: {target.value}")
+        target_label = "reposts and owned posts/replies" if args.delete_all else target.value
+        print(f"\nProcessing: {target_label}")
         navigation_target = Target.REPLIES if args.delete_all else target
-        open_profile(page, args.profile_url, navigation_target, allow_empty=len(targets) > 1)
+        open_profile(page, args.profile_url, navigation_target, allow_empty=args.delete_all or len(targets) > 1)
         if page.locator("article").count() == 0:
             results[target] = (0, 0)
-            print(f"No {target.value} timeline cards found; continuing.")
+            print(f"No {target_label} timeline cards found; continuing.")
             continue
         results[target] = scan_and_maybe_delete(page, args, keywords, hashtags)
     return results
@@ -775,9 +922,9 @@ def main() -> int:
         if args.executable_path:
             print(f"Executable: {args.executable_path}")
         print(f"Profile: {args.browser_profile_dir or default_profile_dir(BrowserName(args.browser))}")
-    # Combined cleanup stays on with_replies for three ordered passes.
-    targets = [Target.RETWEETS, Target.REPLIES, Target.POSTS] if args.delete_all else [Target(args.target)]
-    print(f"Target: {'retweets, replies, posts' if args.delete_all else args.target}")
+    # Combined cleanup interleaves repost and ownership checks in one pass.
+    targets = [Target.POSTS] if args.delete_all else [Target(args.target)]
+    print(f"Target: {'reposts and owned posts/replies' if args.delete_all else args.target}")
     print(f"Match: {args.match}")
     print(f"Scan limit: {args.max_posts if args.max_posts is not None else 'entire timeline'}")
     if MatchMode(args.match) == MatchMode.POLITICS:
@@ -796,6 +943,9 @@ def main() -> int:
         scanned, removed = results[target]
         total_scanned += scanned
         total_removed += removed
+        if args.delete_all:
+            print(f"Done: scanned {scanned} actionable items; removed {removed}.")
+            continue
         action = "unreposted" if target == Target.RETWEETS else "deleted"
         print(f"Done: scanned {scanned} {target.value}; {action} {removed}.")
     if len(targets) > 1:

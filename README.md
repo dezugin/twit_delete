@@ -33,7 +33,7 @@ curl http://127.0.0.1:9222/json/version
 
 ## Warning: Delete Everything
 
-**Unsafe and irreversible:** on the `/with_replies` screen, this command first undoes every repost it can find, then deletes every remaining reply and original post. It does not inspect political content and does not ask for confirmation in the terminal. X still displays its normal per-item confirmation dialog, which the tool accepts automatically.
+**Unsafe and irreversible:** this command makes one interleaved pass through `/with_replies`. For each card, it undoes an active repost or deletes the card when its primary permalink belongs to your profile. It does not inspect political content and does not ask for confirmation in the terminal. X still displays its normal per-item confirmation dialog, which the tool accepts automatically.
 
 With your remote-debugging Chrome window open and logged in, run:
 
@@ -41,9 +41,9 @@ With your remote-debugging Chrome window open and logged in, run:
 python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http://127.0.0.1:9222 --delete-all
 ```
 
-The processing order is: **unretweet everything**, **delete replies**, then **delete original posts**. Items are handled sequentially: find one, remove it, query the updated `/with_replies` timeline, then find the next one. Press `Ctrl+C` to stop.
+Reposts, replies, and original posts are handled in the order they appear. Each item is processed sequentially: find one, choose Undo repost or Delete, act on it, query the updated `/with_replies` timeline, then find the next one. If one of your own posts is also reposted, the tool undoes the repost first, then sees the same owned permalink again and deletes the post. Press `Ctrl+C` to stop.
 
-Before every removal, the tool checks whether the item is a repost. Reposts always use **Undo repost**; only verified non-reposts enter the **Delete** menu. If the check cannot be completed, the item is skipped.
+Before every removal, the tool checks for an active `unretweet` control. That control means your logged-in account reposted the item; the original post may belong to any account. Those items use **Undo repost** without requiring the original author's permalink to match your handle. Only post and reply deletion requires a permalink matching `/YOUR_HANDLE/status/...`, which prevents conversation cards from other accounts from being deleted. The tool first tries the timeline menu; if that fails, it opens the owned permalink in a temporary tab and retries there.
 
 ## Political Command Examples
 
@@ -89,7 +89,7 @@ python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http
 --login                 Open X login and wait for Enter before scanning.
 --target TYPE           Selected category: posts, replies, or retweets.
 --match MODE            Matching mode: politics or all. Default: politics.
---delete-all            On /with_replies: undo reposts, then delete replies/posts.
+--delete-all            Interleave repost undo and owned post/reply deletion.
 --delete-all-posts      Delete every original post regardless of content.
 --delete-all-replies    Delete every reply regardless of content.
 --delete-all-retweets   Undo every repost regardless of content.
@@ -107,7 +107,10 @@ python twit_delete.py --profile-url https://x.com/YOUR_HANDLE --connect-cdp http
 - Run a dry-run command before selective political deletion.
 - `--target replies` uses the profile's `/with_replies` timeline.
 - Reposts are removed by undoing your repost, never by deleting the original author's post.
+- Reposts made by the logged-in account are undone regardless of who authored the original post.
 - Every destructive action re-checks the item type immediately before clicking; an unverified item is skipped.
+- Post ownership is verified from the profile handle in its `/HANDLE/status/...` permalink.
+- Failed timeline deletions are retried from the owned post's permalink in a temporary tab.
 - X changes its interface often. Missing menus or confirmation buttons are reported and skipped.
 - Use this tool only on accounts you control.
 

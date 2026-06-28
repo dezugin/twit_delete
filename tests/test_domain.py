@@ -1,12 +1,19 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import MagicMock, patch
 
+from twit_cleaner.actions import repost_then_unrepost
 from twit_cleaner.app import build_runtime
 from twit_cleaner.cli import parse_args
 from twit_cleaner.keywords import classify_post, load_custom_terms, load_keyword_rules
 from twit_cleaner.models import Target
-from twit_cleaner.posts import combined_action_target, exclusions_apply
+from twit_cleaner.posts import (
+    combined_action_target,
+    exclusions_apply,
+    text_has_own_repost_marker,
+    text_has_repost_marker,
+)
 from twit_cleaner.urls import canonical_owned_status_url
 
 
@@ -15,6 +22,36 @@ KEYWORD_PROFILES = PROJECT_ROOT / "twit_cleaner" / "keyword_profiles.json"
 
 
 class DomainTests(unittest.TestCase):
+    def test_stale_repost_repair_reposts_then_undoes(self) -> None:
+        page = MagicMock()
+        article = MagicMock()
+        repost_button = MagicMock()
+        repost_item = MagicMock()
+        with (
+            patch("twit_cleaner.actions.has_own_repost_marker", return_value=True),
+            patch("twit_cleaner.actions.available_repost_button", return_value=repost_button),
+            patch("twit_cleaner.actions.first_visible_by_labels", return_value=repost_item),
+            patch("twit_cleaner.actions.undo_retweet", return_value=True) as undo,
+            patch("twit_cleaner.actions.time.sleep"),
+            patch("builtins.print"),
+        ):
+            self.assertTrue(repost_then_unrepost(page, article, 0.0))
+        repost_button.click.assert_called_once()
+        repost_item.click.assert_called_once()
+        article.locator.return_value.first.wait_for.assert_called_once()
+        undo.assert_called_once_with(page, article, 0.0)
+
+    def test_stale_repost_repair_rejects_non_owner_markers(self) -> None:
+        page = MagicMock()
+        article = MagicMock()
+        with (
+            patch("twit_cleaner.actions.has_own_repost_marker", return_value=False),
+            patch("twit_cleaner.actions.available_repost_button") as available,
+            patch("builtins.print"),
+        ):
+            self.assertFalse(repost_then_unrepost(page, article, 0.0))
+        available.assert_not_called()
+
     def test_owned_status_url_requires_profile_handle(self) -> None:
         profile = "https://x.com/example/with_replies"
         self.assertEqual(
@@ -33,6 +70,14 @@ class DomainTests(unittest.TestCase):
             combined_action_target(False, "https://x.com/example/status/123"),
             Target.POSTS,
         )
+        self.assertEqual(combined_action_target(False, None, True), Target.RETWEETS)
+
+    def test_repost_markers_support_current_localized_labels(self) -> None:
+        self.assertTrue(text_has_repost_marker("You reposted"))
+        self.assertTrue(text_has_repost_marker("Você repostou"))
+        self.assertFalse(text_has_repost_marker("Repost"))
+        self.assertTrue(text_has_own_repost_marker("Você repostou"))
+        self.assertFalse(text_has_own_repost_marker("Alice reposted"))
 
     def test_exclusions_never_block_unretweet(self) -> None:
         self.assertTrue(exclusions_apply(Target.POSTS, "custom"))

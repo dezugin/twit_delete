@@ -7,9 +7,15 @@ from urllib.parse import urlsplit
 
 from playwright.sync_api import Error as PlaywrightError, Locator, Page, TimeoutError
 
-from .constants import CONFIRM_DELETE_LABELS, DELETE_LABELS, MENU_LABELS, UNREPOST_LABELS
+from .constants import (
+    CONFIRM_DELETE_LABELS,
+    DELETE_LABELS,
+    MENU_LABELS,
+    REPOST_LABELS,
+    UNREPOST_LABELS,
+)
 from .models import Target
-from .posts import active_unretweet_button
+from .posts import active_unretweet_button, available_repost_button, has_own_repost_marker
 
 
 def first_visible_by_labels(
@@ -154,6 +160,60 @@ def undo_retweet(page: Page, article: Locator, pause: float) -> bool:
     return True
 
 
+def repost_then_unrepost(page: Page, article: Locator, pause: float) -> bool:
+    if not has_own_repost_marker(article):
+        print("  skip: first-person stale repost marker not found")
+        return False
+    repost_button = available_repost_button(article)
+    if not repost_button:
+        print("  skip: available Repost control not found")
+        return False
+
+    try:
+        repost_button.click(timeout=3000)
+    except PlaywrightError:
+        print("  skip: Repost control could not be clicked")
+        return False
+    time.sleep(pause)
+
+    repost_item = first_visible_by_labels(page, "menuitem", REPOST_LABELS, timeout=1800)
+    if not repost_item:
+        repost_item = page.locator('[data-testid="retweetConfirm"]').first
+        try:
+            if not repost_item.is_visible(timeout=1200):
+                repost_item = None
+        except PlaywrightError:
+            repost_item = None
+    if not repost_item:
+        page.keyboard.press("Escape")
+        print("  skip: Repost action not found")
+        return False
+
+    try:
+        repost_item.click(timeout=3000)
+    except PlaywrightError:
+        page.keyboard.press("Escape")
+        print("  skip: Repost action could not be clicked")
+        return False
+    time.sleep(max(pause, 1.0))
+
+    for attempt in range(1, 4):
+        try:
+            article.locator('[data-testid="unretweet"]').first.wait_for(
+                state="visible",
+                timeout=5000,
+            )
+        except PlaywrightError:
+            pass
+        print(f"  repaired stale repost state; undoing repost (attempt {attempt}/3)")
+        if undo_retweet(page, article, pause):
+            return True
+        time.sleep(max(pause, 1.0))
+
+    print("  warning: repost succeeded, but all Undo repost attempts failed")
+    return False
+
+
 def remove_item(
     page: Page,
     article: Locator,
@@ -165,8 +225,8 @@ def remove_item(
         print("  checked: repost; using Undo repost")
         return undo_retweet(page, article, pause)
     if target == Target.RETWEETS:
-        print("  skip: item has no active Undo repost control")
-        return False
+        print("  checked: stale repost marker; using Repost then Undo repost")
+        return repost_then_unrepost(page, article, pause)
 
     print("  checked: not a repost; using Delete")
     if delete_post(page, article, pause):
@@ -175,4 +235,3 @@ def remove_item(
         return delete_post_at_permalink(page, status_url, pause)
     print("  skip: no owned permalink was available for fallback")
     return False
-

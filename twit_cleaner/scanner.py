@@ -13,6 +13,7 @@ from .posts import (
     active_unretweet_button,
     combined_action_target,
     exclusions_apply,
+    has_own_repost_marker,
     matches_target,
     owned_status_url,
     post_fingerprint,
@@ -61,6 +62,7 @@ def scan_and_maybe_delete(
                 action_target = combined_action_target(
                     active_unretweet_button(article) is not None,
                     status_url,
+                    has_own_repost_marker(article),
                 )
                 if not action_target:
                     continue
@@ -92,8 +94,16 @@ def scan_and_maybe_delete(
 
             scanned += 1
             processed_item = True
+            stale_repost = (
+                action_target == Target.RETWEETS
+                and active_unretweet_button(article) is None
+                and has_own_repost_marker(article)
+            )
             if options.match_mode == MatchMode.ALL:
-                dry_run_action = "undo repost" if action_target == Target.RETWEETS else "delete"
+                if stale_repost:
+                    dry_run_action = "repost, then undo repost"
+                else:
+                    dry_run_action = "undo repost" if action_target == Target.RETWEETS else "delete"
                 if options.delete:
                     print(f"[{scanned}] checking item type before removal")
                     if status_url:
@@ -125,10 +135,15 @@ def scan_and_maybe_delete(
             if options.delete:
                 if remove_item(page, article, action_target, options.pause, status_url):
                     removed += 1
-                    action = "unreposted" if options.target == Target.RETWEETS else "deleted"
+                    action = "reposted and unreposted" if stale_repost else "unreposted"
+                    if action_target != Target.RETWEETS:
+                        action = "deleted"
                     print(f"  {action}")
             else:
-                action = "unrepost" if options.target == Target.RETWEETS else "delete"
+                if stale_repost:
+                    action = "repost, then undo repost"
+                else:
+                    action = "unrepost" if action_target == Target.RETWEETS else "delete"
                 print(f"  dry-run: would {action}")
             time.sleep(options.pause)
             break
@@ -173,4 +188,3 @@ def scan_targets(
             continue
         results[target] = scan_and_maybe_delete(page, target_options, keywords, hashtags)
     return results
-

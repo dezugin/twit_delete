@@ -47,6 +47,8 @@ Reposts, replies, and original posts are handled in the order they appear. Each 
 
 Before every removal, the tool checks for an active `unretweet` control. That control means your logged-in account reposted the item; the original post may belong to any account. Those items use **Undo repost** without requiring the original author's permalink to match your handle. Only post and reply deletion requires a permalink matching `/YOUR_HANDLE/status/...`, which prevents conversation cards from other accounts from being deleted. The tool first tries the timeline menu; if that fails, it opens the owned permalink in a temporary tab and retries there.
 
+Some stale timeline cards say that you reposted them while X only offers **Repost** instead of **Undo repost**. When such a card is selected for removal, Twit Cleaner repairs the state by reposting it and immediately undoing that repost. This briefly creates a new repost action. Run without `--delete` first to preview these cards as `would repost, then undo repost`.
+
 ## Choose What To Clean
 
 Every built-in profile works with both `--match` and `--exclude-mode`.
@@ -186,6 +188,7 @@ Supplying `--exclude-keywords` without `--exclude-mode` automatically uses custo
 - Run a dry-run command before selective deletion.
 - `--target replies` uses the profile's `/with_replies` timeline.
 - Reposts are removed by undoing your repost, never by deleting the original author's post.
+- A matched stale repost marker with an available Repost action is temporarily reposted and then immediately unreposted.
 - Reposts made by the logged-in account are undone regardless of who authored the original post.
 - Every destructive action re-checks the item type immediately before clicking; an unverified item is skipped.
 - Post ownership is verified from the profile handle in its `/HANDLE/status/...` permalink.
